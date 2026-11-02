@@ -1,0 +1,4 @@
+total 8
+drwxr-x--- 2 despliegue operaciones 4096 Nov  1 15:25 .
+drwxrwxrwx 3 root       root        4096 Nov  1 15:25 ..
+drwxr-x--- 5 despliegue operaciones 4096 Nov  2 14:12 /home/despliegue

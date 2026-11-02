@@ -1,0 +1,2 @@
+despliegue:x:1001:1001::/home/despliegue:/bin/bash
+lector:x:1002:1001::/home/lector:/bin/bash

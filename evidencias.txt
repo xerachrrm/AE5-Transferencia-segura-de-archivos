@@ -1,0 +1,97 @@
+=== 1. ESTADO REAL DE LOS CONTENEDORES ===
+CONTAINER ID   IMAGE                 COMMAND                  CREATED        STATUS                 PORTS                                              NAMES
+6de7b04951ed   ubuntu:24.04          "sleep infinity"         23 hours ago   Up 4 hours                                                                dpl-lab
+ea93793fc483   nginx:1.27-alpine     "/docker-entrypoint.…"   7 days ago     Up 4 hours             0.0.0.0:8000->80/tcp, [::]:8000->80/tcp            dpl-nginx
+f90e73fa54b4   dpage/pgadmin4:9.17   "/entrypoint.sh"         7 days ago     Up 4 hours (healthy)   443/tcp, 0.0.0.0:5050->80/tcp, [::]:5050->80/tcp   dpl-pgadmin
+8b2bf1b7ffed   dpl-app-app           "gunicorn config.wsg…"   7 days ago     Up 4 hours (healthy)   8000/tcp                                           dpl-app-django
+b72a38865150   postgres:16-alpine    "docker-entrypoint.s…"   7 days ago     Up 4 hours (healthy)   5432/tcp                                           dpl-db
+a4c45cc65537   ubuntu:24.04          "sleep infinity"         5 weeks ago    Up 4 hours                                                                dpl-cliente
+
+=== 2. ESTADO DE LA RED DOCKER (dpl-net) ===
+[
+    {
+        "Name": "dpl-net",
+        "Id": "3ed46f6f57a4f97e5b1585b9ae06ede6a169fb45613e39af3b7aa5f278179226",
+        "Created": "2026-09-17T21:27:55.439735057+01:00",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv4": true,
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": {},
+            "Config": [
+                {
+                    "Subnet": "172.18.0.0/16",
+                    "Gateway": "172.18.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Options": {},
+        "Labels": {},
+        "Containers": {
+            "6de7b04951ed9a3e130fb46560ae3c9425437ba41c9852363f136d9f0db2ce7c": {
+                "Name": "dpl-lab",
+                "EndpointID": "f92866579cede8f941cd6bad34ae94eafd9a1db6f729dd23e6be4a48342113ce",
+                "MacAddress": "7a:17:ec:a9:ec:f8",
+                "IPv4Address": "172.18.0.2/16",
+                "IPv6Address": ""
+            },
+            "a4c45cc655374230075c9f24d0b4eecb3fd067f713ea1f3cc3a732ce08707e67": {
+                "Name": "dpl-cliente",
+                "EndpointID": "431994906efc4905cb5a86e282c970b4d3cda229f632c85f080a5e74a5f383e2",
+                "MacAddress": "96:ad:4c:77:99:73",
+                "IPv4Address": "172.18.0.3/16",
+                "IPv6Address": ""
+            }
+        },
+        "Status": {
+            "IPAM": {
+                "Subnets": {
+                    "172.18.0.0/16": {
+                        "IPsInUse": 5,
+                        "DynamicIPsAvailable": 65531
+                    }
+                }
+            }
+        }
+    }
+]
+
+=== 3. PUERTOS EN ESCUCHA EN EL SERVIDOR (dpl-lab) ===
+State  Recv-Q Send-Q Local Address:Port  Peer Address:PortProcess                        
+LISTEN 0      32           0.0.0.0:21         0.0.0.0:*    users:(("vsftpd",pid=12,fd=3))
+LISTEN 0      128          0.0.0.0:22         0.0.0.0:*    users:(("sshd",pid=18,fd=3))  
+LISTEN 0      4096      127.0.0.11:39633      0.0.0.0:*                                  
+LISTEN 0      128             [::]:22            [::]:*    users:(("sshd",pid=18,fd=4))  
+
+=== 4. PROCESOS ACTIVOS EN dpl-lab (vsftpd y sshd) ===
+12 /usr/sbin/vsftpd /etc/vsftpd.conf
+133 [vsftpd] <defunct>
+135 [vsftpd] <defunct>
+138 [vsftpd] <defunct>
+143 [vsftpd] <defunct>
+144 [vsftpd] <defunct>
+18 sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
+43 [sshd] <defunct>
+45 [sshd] <defunct>
+70 [sshd] <defunct>
+83 [sshd] <defunct>
+107 [sshd] <defunct>
+130 [sshd] <defunct>
+
+=== 5. USUARIOS CREADOS EN dpl-lab ===
+despliegue:x:1001:1001::/home/despliegue:/bin/bash
+lector:x:1002:1001::/home/lector:/bin/bash
+
+=== 6. PERMISOS DEL DIRECTORIO WEB ===
+total 8
+drwxr-x--- 2 despliegue operaciones 4096 Nov  1 15:25 .
+drwxrwxrwx 3 root       root        4096 Nov  1 15:25 ..
