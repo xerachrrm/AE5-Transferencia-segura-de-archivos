@@ -1,0 +1,253 @@
+1. **Preparación del Entorno (Docker):**
+    Descargar la imagen (`docker pull ubuntu:24.04`), crear la red (`docker network create dpl-net`) y levantar los contenedores (`dpl-lab` y `dpl-cliente`).
+    ```bash
+    docker network create dpl-net
+    docker run -dit --name dpl-lab --net dpl-net ubuntu:24.04
+    docker run -dit --name dpl-cliente --net dpl-net ubuntu:24.04
+    ```
+
+2. **Instalación de Paquetes en el Servidor (dpl-lab):**
+    Entrar al contenedor servidor y actualizar e instalar `vsftpd`, `openssh-server`, `openssl`, etc.
+    ```bash
+    docker exec -it dpl-lab bash
+    apt-get update && apt-get install -y vsftpd openssh-server openssl
+    ```
+
+3. **Crear grupo operaciones:**
+   ```bash
+   groupadd operaciones
+   ```
+    *Comprobar grupos:
+    ```bash
+    getent group
+    ```
+    *Comprobar un grupo específico:
+    ```bash
+    getent group "operaciones"
+    ```
+
+4. **Crear los usuarios 'despliegue' y 'lector':**
+    *Creación de cuentas locales:
+        Crea los dos usuarios, asignándoles el grupo principal operaciones (`-g`) y una carpeta de inicio (`-m`):
+        ```bash
+        useradd -m -g operaciones -s /bin/bash despliegue
+        useradd -m -g operaciones -s /bin/bash lector
+        ```
+
+5. **Asignar contraseñas a los usuarios:**
+        *Configura una contraseña para cada usuario:
+        ```bash
+        echo "despliegue:despliegue2026" | chpasswd
+        echo "lector:lector2026" | chpasswd
+        ```
+
+6. **Crear el directorio web:**
+        *Crea la ruta exacta donde se desplegará la aplicación web:
+        ```bash 
+        mkdir -p /srv/dpl/web
+        ```
+
+7. **Configurar propietario, grupo y permisos 750:**
+        *Haz que el usuario `despliegue` sea el propietario y el grupo `operaciones` el propietario del grupo, y aplica los permisos 750:
+        ```bash
+        chown -R despliegue:operaciones /srv/dpl/web
+        chmod 750 /srv/dpl/web
+        ```
+        Para verificar los permisos usamos:
+        ```bash
+        ls -ld /srv/dpl/web
+        ```
+    
+8. **Configurar servidor FTP:**
+    Para configurar el servidor FTP con seguridad (desactivando el acceso anónimo, habilitando los usuarios locales con escritura y configurando FTPS explícito con cifrado TLS), necesitamos modificar el fichero de configuración `/etc/vsftpd.conf` en el servidor `dpl-lab` y generar un certificado SSL.
+    Nos aseguramos de seguir en la terminal del contenedor servidor (`dpl-lab`).
+    Para volver a entrar: `docker exec -it dpl-lab bash`.
+
+    8.1 *Generar un certificado SSL autofirmado:
+        ```bash
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout /etc/ssl/private/vsftpd.pem \
+        -out /etc/ssl/private/vsftpd.pem \
+        -subj "/ES/ST=Madrid/L=Madrid/O=DPL/CN=dpl-lab"
+        ```
+        Comprobamos que se haya creado correctamente: 
+        ```bash
+        ls -l /etc/ssl/private/vsftpd.pem
+        ```
+
+    8.2 *Instalamos nano en la imagen de ubuntu para abrir y modificar el fichero vsftpd.conf:
+        ```bash
+        apt-get update && apt-get install -y nano
+        ```
+    
+        Una vez dentro del fichero, lo dejamos configurado de la siguiente manera:
+            ```bash
+            cat << 'EOF' > /etc/vsftpd.conf
+            listen=YES
+            listen_ipv6=NO
+            anonymous_enable=NO
+            local_enable=YES
+            write_enable=YES
+            local_umask=022
+            dirmessage_enable=YES
+            use_localtime=YES
+            xferlog_enable=YES
+            connect_from_port_20=YES
+            ftpd_banner=Bienvenido al servidor FTP seguro DPL.
+
+            # Aislamiento de usuarios en su directorio
+            chroot_local_user=YES
+            allow_writeable_chroot=YES
+
+            # Modo pasivo (puertos para la transferencia de datos)
+            pasv_enable=YES
+            pasv_min_port=40000
+            pasv_max_port=40100
+
+            # Configuración de FTPS (SSL/TLS Explícito)
+            ssl_enable=YES
+            allow_anon_ssl=NO
+            force_local_data_ssl=YES
+            force_local_logins_ssl=YES
+            ssl_tlsv1_2=YES
+            ssl_sslv2=NO
+            ssl_sslv3=NO
+            rsa_cert_file=/etc/ssl/private/vsftpd.pem
+            rsa_private_key_file=/etc/ssl/private/vsftpd.pem
+            require_ssl_reuse=NO
+            EOF
+            ```
+
+9. **Endurecer OpenSSH y configurar SFTP seguro:**
+    Entramos dentro de `sshd_config`:
+    ```bash
+    nano /etc/ssh/sshd_config
+    ```
+    Modificamos las siguientes líneas para que queden así:
+    
+    PermitRootLogin no
+    PasswordAuthentication no
+    PubkeyAuthentication yes
+    Subsystem sftp internal-sftp
+
+    *¿Qué significa esto?
+    - **PermitRootLogin no**: Impide que nadie pueda iniciar sesión como administrador (`root`) por SSH/SFTP (vital por seguridad).
+    - **PasswordAuthentication no**: Desactiva el acceso por contraseña clásica, obligando a usar únicamente claves criptográficas públicas.
+    - **PubkeyAuthentication yes**: Permite la autenticación mediante par de claves.
+    - **Subsystem sftp internal-sftp**: Configura el subsistema interno para transferencias SFTP seguras.
+
+10. **Arrancar servicios y comprobar contenedores:**
+    En la terminal del ordenador anfitrión lanzamos el servidor FTP:
+    ```bash
+    docker exec -d dpl-lab /usr/sbin/vsftpd /etc/vsftpd.conf
+    ```
+    Comprobamos que el proceso está ejecutándose:
+    ```bash
+    docker exec dpl-lab pgrep -a vsftpd
+    ```
+    Lanzamos el servicio SSH dentro del servidor:
+    ```bash
+    docker exec -d dpl-lab /usr/sbin/sshd -D
+    ```
+    Comprobamos el proceso en ejecución:
+    ```bash
+    docker exec dpl-lab pgrep -a sshd
+    ```
+    Verificamos que los puertos 21 y 22 están escuchando:
+    ```bash
+    docker exec dpl-lab ss -lntp
+    ```
+
+11. **Generar par de claves SSH dpl-cliente // dpl-lab y automatización:**
+    11.1 *Creamos al usuario despliegue en dpl-cliente:
+        ```bash
+        useradd -m -s /bin/bash despliegue
+        ```
+    11.2 *Instalamos ssh-keygen y herramientas necesarias en dpl-cliente:
+        ```bash
+        apt-get update && apt-get install -y openssh-client lftp
+        ```
+    11.3 *Ejecutamos ssh-keygen para generar el par de claves:
+        ```bash
+        ssh-keygen -t rsa -b 4096 -N "" -f ~/.ssh/id_rsa
+        ```
+    11.4 *Copiamos la clave ssh generada al dpl-lab (Servidor):
+            Ejecutamos desde el anfitrión:
+            ```bash
+            docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' dpl-lab
+            ```
+        *Obtenemos la clave de forma manual en el cliente:
+            ```bash
+            cat ~/.ssh/id_rsa.pub
+            ```
+        Y la copiamos. Pegamos la clave en el servidor (`dpl-lab`) para el usuario `despliegue` en la carpeta `~/.ssh/authorized_keys`.
+        *Le damos permisos al archivo:
+        ```bash
+        chmod 600 ~/.ssh/authorized_keys
+        ```
+
+    11.5 *Probamos la conexión sin contraseña desde el cliente:
+        Dentro de `dpl-cliente`, con el usuario `despliegue`, lanzamos el siguiente comando:
+        ```bash
+        ssh despliegue@dpl-lab 'echo "Conexion SSH y clave publica funcionando perfectamente"'
+        ```
+        Si devuelve "Conexion SSH y clave publica funcionando perfectamente" - Todo correcto.     
+
+    11.6 *Automatización con script de arranque (`arrancar-servicios.sh`):
+            Creamos el script con el siguiente contenido:
+            ```bash
+            #!/bin/bash
+            echo "1. Encendiendo contenedores..."
+            docker start dpl-lab dpl-cliente
+
+            echo "2. Arrancando vsftpd y sshd en dpl-lab..."
+            docker exec -d dpl-lab /usr/sbin/vsftpd /etc/vsftpd.conf
+            docker exec -d dpl-lab /usr/sbin/sshd -D
+
+            echo "3. Esperando 2 segundos a que estabilicen los servicios..."
+            sleep 2
+
+            echo "4. Probando conexión SSH por clave pública desde dpl-cliente..."
+            docker exec -it dpl-cliente su - despliegue -c "ssh -o StrictHostKeyChecking=no despliegue@dpl-lab 'echo ¡Prueba de conexión superada con éxito!'"
+
+            echo "¡Entorno listo y verificado!"
+            ```
+
+12. **Pruebas de transferencia y cifrado con `lftp`:**
+    * **12.1 * Ignorar certificados autofirmados (FTPS):**
+      Dado que el servidor utiliza un certificado SSL autofirmado, configuramos `lftp` para omitir la validación estricta:
+      ```lftp
+      set ssl:verify-certificate no
+      ```
+
+    * **12.2 * Comprobación de modos Activo y Pasivo:**
+      Conectamos al servidor desde el contenedor cliente:
+      ```bash
+      lftp -u despliegue,despliegue2026 -e "set ssl:verify-certificate no" dpl-lab
+      ```
+      Una vez dentro, alternamos los modos de transferencia y listamos el contenido para comprobar que abren el canal de datos con éxito:
+      ```lftp
+      # Modo Pasivo (por defecto)
+      set ftp:passive-mode on
+      ls -la
+
+      # Modo Activo
+      set ftp:passive-mode off
+      ls -la
+      ```
+
+    * **12.3 * Pruebas de subida (`put`) y descarga (`get`):**
+      * **Subida de ficheros al servidor:**
+        Creamos un fichero de prueba local en el cliente y lo subimos mediante FTP seguro:
+        ```bash
+        echo "Prueba de transferencia segura AE5" > fichero_prueba.txt
+        ```
+        Y dentro de la sesión de `lftp`:
+        ```lftp
+        put fichero_prueba.txt
+        ```
+      * **Descarga de ficheros del servidor:**
+        Verificamos la bajada recuperando el fichero de vuelta:
+        ```lftp
+        get fichero_prueba.txt -o fichero_descargado.txt
+        ```
